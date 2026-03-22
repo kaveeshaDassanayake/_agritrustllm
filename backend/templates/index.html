@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AgriTrustLLM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <h1>🌾 AgriTrustLLM</h1>
+    <p class="subtitle">
+        Detecting and mitigating hallucinations in agricultural advisory systems
+    </p>
+
+    <textarea id="query" placeholder="Enter your agricultural question here..."></textarea>
+
+    <select id="mode">
+        <option value="baseline">Mode A - Baseline LLM</option>
+        <option value="rag">Mode B - RAG Only</option>
+        <option value="agritrust">Mode C - RAG + Validation</option>
+    </select>
+
+    <button onclick="submitQuery()">Submit</button>
+
+    <div id="result" class="hidden">
+        <h3 id="modeTitle"></h3>
+        <p><strong>Answer:</strong></p>
+        <p id="answer"></p>
+
+        <div id="validation" class="hidden">
+            <p><strong>Confidence:</strong> <span id="confidence"></span></p>
+            <p><strong>Hallucinated:</strong> <span id="hallucinated"></span></p>
+        </div>
+    </div>
+</div>
+
+<script>
+async function submitQuery() {
+    const query = document.getElementById("query").value;
+    const mode = document.getElementById("mode").value;
+
+    if (!query.trim()) {
+        alert("Please enter a query.");
+        return;
+    }
+
+    let endpoint = "";
+
+    if (mode === "baseline") endpoint = "/baseline";
+    else if (mode === "rag") endpoint = "/rag";
+    else if (mode === "agritrust") endpoint = "/agritrust";
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query })
+    });
+
+
+    const data = await response.json();
+
+    document.getElementById("result").classList.remove("hidden");
+    document.getElementById("modeTitle").innerText = `Mode: ${mode.toUpperCase()}`;
+    document.getElementById("answer").innerText = data.answer;
+
+    if (data.validation) {
+        document.getElementById("validation").classList.remove("hidden");
+        document.getElementById("confidence").innerText = data.validation.confidence;
+        document.getElementById("hallucinated").innerText = data.validation.hallucinated;
+    } else {
+        document.getElementById("validation").classList.add("hidden");
+    }
+}
+</script>
+
+</body>
+</html>
