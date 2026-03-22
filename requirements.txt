@@ -1,11 +1,10 @@
 flask
-transformers
 sentence-transformers
 langchain
 langchain-community
 langchain-huggingface
 langchain-text-splitters
 faiss-cpu
-torch
 huggingface-hub
+python-dotenv
 gunicorn

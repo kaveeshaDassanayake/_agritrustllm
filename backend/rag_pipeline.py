@@ -4,7 +4,6 @@ load_dotenv()  # loads .env file when running locally
 
 # --- Lazy-loaded globals ---
 _embedding_model = None
-_baseline_llm = None
 _client = None
 
 
@@ -18,21 +17,8 @@ def get_embedding_model():
     return _embedding_model
 
 
-def get_baseline_llm():
-    global _baseline_llm
-    if _baseline_llm is None:
-        from transformers import pipeline
-        _baseline_llm = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-small",
-            max_new_tokens=128,
-            do_sample=False,
-            repetition_penalty=1.2
-        )
-    return _baseline_llm
-
-
 def get_client():
+    """Single HuggingFace Inference API client used by all modes."""
     global _client
     if _client is None:
         from huggingface_hub import InferenceClient
@@ -43,13 +29,31 @@ def get_client():
     return _client
 
 
-# Baseline response (Mode A)
-def baseline_response(query: str):
-    result = get_baseline_llm()(query)
-    return result[0]["generated_text"].strip()
+def _call_api(prompt: str) -> str:
+    """Helper to call the HF Inference API and return the answer text."""
+    client = get_client()
+    response = client.chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=512
+    )
+    return response.choices[0].message.content.strip()
 
 
-# RAG response generation (Mode B & C)
+# Mode A – Baseline: pure LLM answer via API, no retrieval
+def baseline_response(query: str) -> str:
+    prompt = f"""You are an agricultural advisory assistant for Sri Lanka.
+Answer the following question clearly and briefly using your knowledge.
+
+Question: {query}
+
+Answer:"""
+    try:
+        return _call_api(prompt)
+    except Exception as e:
+        return f"Error contacting the API: {str(e)}"
+
+
+# Mode B & C – RAG response via API with retrieved context
 def generate_rag_response(query: str, vectorstore, k: int = 4):
     docs = vectorstore.similarity_search_with_score(query, k=8)
 
@@ -64,8 +68,7 @@ def generate_rag_response(query: str, vectorstore, k: int = 4):
 
     context = "\n".join([f"- {doc.page_content.strip()}" for doc in filtered])
 
-    prompt = f"""
-You are an agricultural advisory assistant for Sri Lanka.
+    prompt = f"""You are an agricultural advisory assistant for Sri Lanka.
 
 Use ONLY the information given below.
 Do not use outside knowledge.
@@ -80,15 +83,12 @@ Context:
 Question:
 {query}
 
-Write a short factual answer (1-3 sentences).
-"""
+Write a short factual answer (1-3 sentences)."""
 
-    client = get_client()
-    response = client.chat_completion(
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=512
-    )
-    answer = response.choices[0].message.content.strip()
+    try:
+        answer = _call_api(prompt)
+    except Exception as e:
+        return f"Error contacting the API: {str(e)}", filtered
 
     if "insufficient" in answer.lower() or len(answer.split()) < 5:
         return "Insufficient information in the provided documents.", filtered
