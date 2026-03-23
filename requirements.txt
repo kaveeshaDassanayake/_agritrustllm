@@ -6,5 +6,6 @@ langchain-huggingface
 langchain-text-splitters
 faiss-cpu
 huggingface-hub
+groq
 python-dotenv
 gunicorn

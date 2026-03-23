@@ -18,21 +18,19 @@ def get_embedding_model():
 
 
 def get_client():
-    """Single HuggingFace Inference API client used by all modes."""
+    """Groq client — free tier, llama-3.3-70b-versatile."""
     global _client
     if _client is None:
-        from huggingface_hub import InferenceClient
-        _client = InferenceClient(
-            "mistralai/Mistral-7B-Instruct-v0.2",
-            token=os.environ.get("HF_API_TOKEN")
-        )
+        from groq import Groq
+        _client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     return _client
 
 
 def _call_api(prompt: str) -> str:
-    """Helper to call the HF Inference API and return the answer text."""
+    """Call Groq API and return the answer text."""
     client = get_client()
-    response = client.chat_completion(
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=512
     )
