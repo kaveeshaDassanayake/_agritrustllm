@@ -46,30 +46,56 @@ async function submitQuery() {
     }
 
     let endpoint = "";
-
     if (mode === "baseline") endpoint = "/baseline";
     else if (mode === "rag") endpoint = "/rag";
     else if (mode === "agritrust") endpoint = "/agritrust";
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query })
-    });
-
-
-    const data = await response.json();
-
+    // Show loading state
+    const btn = document.querySelector("button");
+    btn.disabled = true;
+    btn.innerText = "Loading... (first request may take ~30s)";
     document.getElementById("result").classList.remove("hidden");
     document.getElementById("modeTitle").innerText = `Mode: ${mode.toUpperCase()}`;
-    document.getElementById("answer").innerText = data.answer;
+    document.getElementById("answer").innerText = "Waiting for response...";
+    document.getElementById("validation").classList.add("hidden");
 
-    if (data.validation) {
-        document.getElementById("validation").classList.remove("hidden");
-        document.getElementById("confidence").innerText = data.validation.confidence;
-        document.getElementById("hallucinated").innerText = data.validation.hallucinated;
-    } else {
-        document.getElementById("validation").classList.add("hidden");
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            const err = await response.text();
+            document.getElementById("answer").innerText = `Server error (${response.status}): ${err}`;
+            return;
+        }
+
+        const data = await response.json();
+        document.getElementById("answer").innerText = data.answer;
+
+        if (data.validation) {
+            document.getElementById("validation").classList.remove("hidden");
+            document.getElementById("confidence").innerText = data.validation.confidence;
+            document.getElementById("hallucinated").innerText = data.validation.hallucinated;
+        } else {
+            document.getElementById("validation").classList.add("hidden");
+        }
+    } catch (err) {
+        if (err.name === "AbortError") {
+            document.getElementById("answer").innerText = "Request timed out after 2 minutes. The server may be overloaded or the API key may be invalid.";
+        } else {
+            document.getElementById("answer").innerText = `Error: ${err.message}`;
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Submit";
     }
 }
 </script>
