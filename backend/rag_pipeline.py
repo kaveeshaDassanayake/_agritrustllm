@@ -1,10 +1,10 @@
 import os
+import requests
 from dotenv import load_dotenv
 load_dotenv()  # loads .env file when running locally
 
 # --- Lazy-loaded globals ---
 _embedding_model = None
-_client = None
 
 
 def get_embedding_model():
@@ -17,24 +17,30 @@ def get_embedding_model():
     return _embedding_model
 
 
-def get_client():
-    """Groq client — free tier, llama-3.3-70b-versatile."""
-    global _client
-    if _client is None:
-        from groq import Groq
-        _client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    return _client
-
-
 def _call_api(prompt: str) -> str:
-    """Call Groq API and return the answer text."""
-    client = get_client()
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=512
+    """
+    Call Groq's OpenAI-compatible REST API directly using requests.
+    No groq SDK needed — avoids any Python 3.14 compatibility issues.
+    """
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise ValueError("GROQ_API_KEY environment variable is not set.")
+
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 512
+        },
+        timeout=60
     )
-    return response.choices[0].message.content.strip()
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
 
 
 # Mode A – Baseline: pure LLM answer via API, no retrieval
@@ -58,7 +64,6 @@ def generate_rag_response(query: str, vectorstore, k: int = 4):
     if not docs:
         return "Insufficient information in the knowledge base.", []
 
-    # Filter weak retrievals
     filtered = [d for d, score in docs if score < 1.2]
     if not filtered:
         filtered = [d for d, _ in docs[:3]]
